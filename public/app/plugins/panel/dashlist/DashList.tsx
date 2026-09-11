@@ -142,9 +142,9 @@ export function DashList(props: PanelProps<Options>) {
       }
     }
     return [
-      dashboardsGroupsMap.starred.sort((a, b) => collator.compare(a.name, b.name)),
+      dashboardsGroupsMap.starred.sort((a, b) => collator.compare(a.uid, b.uid)),
       dashboardsGroupsMap.recent,
-      dashboardsGroupsMap.searched.sort((a, b) => collator.compare(a.name, b.name)),
+      dashboardsGroupsMap.searched.sort((a, b) => collator.compare(a.uid, b.uid)),
     ];
   }, [dashboards]);
 
