@@ -30,6 +30,10 @@
     [[ end ]]
 
     <script nonce="[[.Nonce]]">
+      localStorage.setItem('grafana.navigation.docked', 'false');
+    </script>
+
+    <script nonce="[[.Nonce]]">
       performance.mark('frontend_boot_css_time_seconds');
     </script>
 
