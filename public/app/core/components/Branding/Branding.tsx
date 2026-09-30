@@ -3,7 +3,7 @@ import { type FC, type JSX } from 'react';
 
 import { colorManipulator, type GrafanaTheme2, type NavModelItem } from '@grafana/data';
 import { selectors } from '@grafana/e2e-selectors';
-import { reportInteraction } from '@grafana/runtime';
+import { reportInteraction, config } from '@grafana/runtime';
 import { Text, Tooltip, useStyles2, useTheme2 } from '@grafana/ui';
 import g8LoginDarkSvg from 'img/g8_login_dark.svg';
 import g8LoginLightSvg from 'img/g8_login_light.svg';
@@ -147,8 +147,8 @@ export class Branding {
   static LoginBackground = LoginBackground;
   static MenuLogo = MenuLogo;
   static LoginBoxBackground = LoginBoxBackground;
-  static AppTitle = 'PROJECT CMS';
-  static LoginTitle = 'Welcome to PROJECT CMS';
+  static AppTitle = config.appTitle;
+  static LoginTitle = 'Welcome to ' + config.appTitle;
   static HideEdition = false;
   static GetLoginSubTitle = (): null | string => {
     return null;

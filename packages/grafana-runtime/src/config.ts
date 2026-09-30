@@ -93,6 +93,7 @@ export class GrafanaBootConfig {
   apps: Record<string, AppPluginConfigGrafanaData> = {};
   auth: AuthSettings = {};
   minRefreshInterval = '';
+  appTitle = 'APP';
   appUrl = '';
   appSubUrl = '';
   namespace = 'default';
