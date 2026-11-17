@@ -174,6 +174,7 @@ type FrontendSettingsDTO struct {
 	MinRefreshInterval   string                           `json:"minRefreshInterval"`
 	Panels               map[string]plugins.PanelDTO      `json:"panels"`
 	Apps                 map[string]*plugins.AppDTO       `json:"apps"`
+	AppTitle             string                           `json:"appTitle"`
 	AppUrl               string                           `json:"appUrl"`
 	AppSubUrl            string                           `json:"appSubUrl"`
 	AllowOrgCreate       bool                             `json:"allowOrgCreate"`

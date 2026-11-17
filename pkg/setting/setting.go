@@ -145,6 +145,7 @@ type Cfg struct {
 	HTTPAddr          string
 	HTTPPort          string
 	Env               string
+	AppTitle          string
 	AppURL            string
 	AppSubURL         string
 	InstanceName      string
@@ -2335,6 +2336,7 @@ func (cfg *Cfg) readServerSettings(iniFile *ini.File) error {
 	}
 	copyServerURLSettingsToGlobals(cfg)
 
+	cfg.AppTitle = valueAsString(server, "app_title", "APP")
 	cfg.Protocol = HTTPScheme
 	cfg.ServeFromSubPath = server.Key("serve_from_sub_path").MustBool(false)
 	cfg.CertWatchInterval = server.Key("certs_watch_interval").MustDuration(0)
