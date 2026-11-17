@@ -687,7 +687,7 @@ build-docker-full: ## Build Docker image for development.
 	--build-arg SOURCE_DATE_EPOCH=$$(git log -1 --format=%ct) \
 	--build-arg SLIM=$(SLIM) \
 	--target=final-alpine \
-	--tag grafana/grafana$(TAG_SUFFIX):dev \
+	--tag mtrumble/grafana \
 	$(DOCKER_BUILD_ARGS) \
 	.
 
