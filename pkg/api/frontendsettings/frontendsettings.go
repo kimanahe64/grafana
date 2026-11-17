@@ -15,6 +15,8 @@ import (
 	contextmodel "github.com/grafana/grafana/pkg/services/contexthandler/model"
 	"github.com/grafana/grafana/pkg/services/folder"
 	"github.com/grafana/grafana/pkg/services/licensing"
+	"github.com/grafana/grafana/pkg/services/navtree"
+	"github.com/grafana/grafana/pkg/services/publicdashboards"
 	"github.com/grafana/grafana/pkg/setting"
 )
 
@@ -66,6 +68,7 @@ func GetBaseFrontendSettings(reqCtx *contextmodel.ReqContext, cfg *setting.Cfg, 
 		RudderstackV3SdkUrl:                  cfg.RudderstackV3SDKURL,
 		RudderstackConfigUrl:                 cfg.RudderstackConfigURL,
 		RudderstackIntegrationsUrl:           cfg.RudderstackIntegrationsURL,
+		RudderstackBatchInterval:             cfg.RudderstackBatchInterval,
 		PostHogToken:                         cfg.PostHogToken,
 		PostHogHost:                          cfg.PostHogHost,
 		AnalyticsConsoleReporting:            cfg.FrontendAnalyticsConsoleReporting,
@@ -73,7 +76,6 @@ func GetBaseFrontendSettings(reqCtx *contextmodel.ReqContext, cfg *setting.Cfg, 
 		DashboardPerformanceMetrics:          cfg.DashboardPerformanceMetrics,
 		PanelSeriesLimit:                     cfg.PanelSeriesLimit,
 		DashboardDefaultPreload:              cfg.DashboardDefaultPreload,
-		ReportRenderQueryGracePeriod:         int(cfg.ReportRenderQueryGracePeriod.Milliseconds()),
 		FeedbackLinksEnabled:                 cfg.FeedbackLinksEnabled,
 		ApplicationInsightsConnectionString:  cfg.ApplicationInsightsConnectionString,
 		ApplicationInsightsEndpointUrl:       cfg.ApplicationInsightsEndpointUrl,
@@ -100,7 +102,7 @@ func GetBaseFrontendSettings(reqCtx *contextmodel.ReqContext, cfg *setting.Cfg, 
 		PluginRestrictedAPIsAllowList:    cfg.PluginRestrictedAPIsAllowList,
 		PluginRestrictedAPIsBlockList:    cfg.PluginRestrictedAPIsBlockList,
 		PublicDashboardAccessToken:       reqCtx.PublicDashboardAccessToken,
-		PublicDashboardsEnabled:          cfg.PublicDashboardsEnabled,
+		PublicDashboardsEnabled:          publicdashboards.Enabled(reqCtx.Req.Context(), cfg),
 		CloudMigrationEnabled:            cfg.CloudMigration.Enabled,
 		CloudMigrationIsTarget:           isCloudMigrationTarget,
 		CloudMigrationPollIntervalMs:     int(cfg.CloudMigration.FrontendPollInterval.Milliseconds()),
@@ -133,20 +135,18 @@ func GetBaseFrontendSettings(reqCtx *contextmodel.ReqContext, cfg *setting.Cfg, 
 			EnabledFeatures: license.EnabledFeatures(),
 		},
 
-		FeatureToggles:                   make(map[string]bool),
-		AnonymousEnabled:                 cfg.Anonymous.Enabled,
-		AnonymousDeviceLimit:             cfg.Anonymous.DeviceLimit,
-		RendererDefaultImageWidth:        cfg.RendererDefaultImageWidth,
-		RendererDefaultImageHeight:       cfg.RendererDefaultImageHeight,
-		RendererDefaultImageScale:        cfg.RendererDefaultImageScale,
-		Http2Enabled:                     cfg.Protocol == setting.HTTP2Scheme || cfg.Protocol == setting.SocketHTTP2Scheme,
-		GrafanaJavascriptAgent:           cfg.GrafanaJavascriptAgent,
-		PluginCatalogURL:                 cfg.PluginCatalogURL,
-		PluginAdminEnabled:               cfg.PluginAdminEnabled,
-		PluginAdminExternalManageEnabled: cfg.PluginAdminEnabled && cfg.PluginAdminExternalManageEnabled,
-		PluginCatalogHiddenPlugins:       cfg.PluginCatalogHiddenPlugins,
-		PluginCatalogManagedPlugins:      []string{},
-
+		FeatureToggles:                      make(map[string]bool),
+		AnonymousEnabled:                    cfg.Anonymous.Enabled,
+		AnonymousDeviceLimit:                cfg.Anonymous.DeviceLimit,
+		RendererDefaultImageWidth:           cfg.RendererDefaultImageWidth,
+		RendererDefaultImageHeight:          cfg.RendererDefaultImageHeight,
+		RendererDefaultImageScale:           cfg.RendererDefaultImageScale,
+		Http2Enabled:                        cfg.Protocol == setting.HTTP2Scheme || cfg.Protocol == setting.SocketHTTP2Scheme,
+		GrafanaJavascriptAgent:              cfg.GrafanaJavascriptAgent,
+		PluginCatalogURL:                    cfg.PluginCatalogURL,
+		PluginAdminEnabled:                  cfg.PluginAdminEnabled,
+		PluginAdminExternalManageEnabled:    cfg.PluginAdminEnabled && cfg.PluginAdminExternalManageEnabled,
+		PluginCatalogHiddenPlugins:          cfg.PluginCatalogHiddenPlugins,
 		PluginCatalogPreinstalledPlugins:    append(cfg.PreinstallPluginsAsync, cfg.PreinstallPluginsSync...),
 		PluginCatalogPreinstalledAutoUpdate: cfg.PreinstallAutoUpdate,
 		ExpressionsEnabled:                  cfg.ExpressionsEnabled,
@@ -201,7 +201,8 @@ func GetBaseFrontendSettings(reqCtx *contextmodel.ReqContext, cfg *setting.Cfg, 
 			Backend: cfg.UnifiedAlerting.StateHistory.Backend,
 			Primary: cfg.UnifiedAlerting.StateHistory.MultiPrimary,
 		}
-		if cfg.UnifiedAlerting.StateHistory.PrometheusTargetDatasourceUID != "" {
+		// The frontend shows the alert activity page when this is set, using the same check as the nav tree.
+		if cfg.UnifiedAlerting.StateHistory.HasAlertStateMetrics() {
 			frontendSettings.UnifiedAlerting.StateHistory.PrometheusTargetDatasourceUID = cfg.UnifiedAlerting.StateHistory.PrometheusTargetDatasourceUID
 		}
 		if cfg.UnifiedAlerting.StateHistory.PrometheusMetricName != "" {
@@ -214,6 +215,7 @@ func GetBaseFrontendSettings(reqCtx *contextmodel.ReqContext, cfg *setting.Cfg, 
 	}
 
 	frontendSettings.UnifiedAlerting.RecordingRulesEnabled = cfg.UnifiedAlerting.RecordingRules.Enabled
+	frontendSettings.UnifiedAlerting.NotificationHistoryEnabled = cfg.UnifiedAlerting.NotificationHistory.Enabled
 	frontendSettings.UnifiedAlerting.DefaultRecordingRulesTargetDatasourceUID = cfg.UnifiedAlerting.RecordingRules.DefaultDatasourceUID
 
 	if cfg.UnifiedAlerting.Enabled != nil {
@@ -236,6 +238,8 @@ func GetBaseFrontendSettings(reqCtx *contextmodel.ReqContext, cfg *setting.Cfg, 
 		frontendSettings.PluginsCDNBaseURL = cdnBaseURL
 	}
 
+	frontendSettings.Navigation = ReadNavigationSettings(cfg)
+
 	// Set the kubernetes namespace
 
 	// [TODO] Restore namespace in the frontend service from baggage or context
@@ -252,4 +256,15 @@ func getShortCommitHash(commitHash string, maxLength int) string {
 		return commitHash[:maxLength]
 	}
 	return commitHash
+}
+
+// ReadNavigationSettings reads the operator nav placement overrides, with the
+// same parser the server-built tree uses. The frontend service sends these in
+// its own slim settings as well, since the client-built nav tree reads them at
+// boot.
+func ReadNavigationSettings(cfg *setting.Cfg) dtos.FrontendSettingsNavigationDTO {
+	return dtos.FrontendSettingsNavigationDTO{
+		AppSections:        navtree.ParseNavigationPlacements(cfg.Raw.Section("navigation.app_sections")),
+		AppStandalonePages: navtree.ParseNavigationPlacements(cfg.Raw.Section("navigation.app_standalone_pages")),
+	}
 }

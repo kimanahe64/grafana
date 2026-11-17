@@ -1,6 +1,6 @@
 # Grafana ESLint Rules
 
-This package contains custom eslint rules for use within the Grafana codebase only. They're extremely specific to our codebase, and are of little use to anyone else. They're not published to NPM, and are consumed through the Yarn workspace.
+This package contains custom eslint rules for use within the Grafana codebase only. They are specific to this codebase, are not published to npm, and are consumed through the pnpm workspace.
 
 ## Rules
 
@@ -244,16 +244,16 @@ Import '../status-history/utils' reaches outside the 'histogram' plugin director
 
 ### `zod-import-namespace`
 
-Require all zod imports to use a namespace named `z` from the root `zod` package.
+Require all zod imports to use a namespace named `z` from `zod/mini`.
 
 This rule allows only:
 
 ```ts
-import * as z from 'zod';
-import type * as z from 'zod';
+import * as z from 'zod/mini';
+import type * as z from 'zod/mini';
 ```
 
-It disallows any other zod import style, including named/default imports and all zod subpath imports such as `zod/mini`. This ensures that all zod imports are consistent, allowing for a smaller bundle size.
+It disallows any other zod import style, including named/default imports and imports from the root `zod` package. This keeps first-party Zod usage on the smaller Mini API.
 
 #### Examples
 
@@ -263,11 +263,11 @@ import { z } from 'zod';
 import z from 'zod';
 import * as zod from 'zod';
 import type { ZodType } from 'zod';
-import * as z from 'zod/mini';
+import * as z from 'zod/v4';
 
 // Good ✅
-import * as z from 'zod';
-import type * as z from 'zod';
+import * as z from 'zod/mini';
+import type * as z from 'zod/mini';
 ```
 
 ### `define-feature-events`
@@ -365,3 +365,26 @@ const logger = createMonitoringLogger('features.my-area');
 import { getLogger } from '@grafana/runtime/unstable';
 const logger = getLogger('features.my-area');
 ```
+
+### `no-config-feature-toggles`
+
+Disallow reads of the legacy `config.featureToggles` map. Feature flags should be read through OpenFeature instead — `useFlagXxx()` from `@grafana/runtime/internal` in React, or `getFeatureFlagClient().getBooleanValue(FlagKeys.Xxx, default)` outside it.
+
+#### Examples
+
+```ts
+// Bad ❌
+import { config } from '@grafana/runtime';
+if (config.featureToggles.myFeatureFlag) {
+}
+
+// Good ✅ — in React
+import { useFlagMyFeatureFlag } from '@grafana/runtime/internal';
+const enabled = useFlagMyFeatureFlag();
+
+// Good ✅ — outside React
+import { FlagKeys, getFeatureFlagClient } from '@grafana/runtime/internal';
+const enabled = getFeatureFlagClient().getBooleanValue(FlagKeys.MyFeatureFlag, false);
+```
+
+If the flag has no OpenFeature target yet, add `React: true` alongside its existing `LegacyFrontend` in `pkg/services/featuremgmt/registry.go` — do not rename it, since the name is the OFREP key — then run `make gen-feature-toggles`. New flags should use `Generate{React: true}` with a `component.flagName` name and no legacy target. See [the feature flags guide](../../contribute/feature-toggles.md).

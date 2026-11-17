@@ -8,7 +8,6 @@ import {
   FieldType,
   type LinkModel,
   mapInternalLinkToExplore,
-  rangeUtil,
   type ScopedVars,
   type SplitOpen,
   type TimeRange,
@@ -28,7 +27,7 @@ import { type ExploreFieldLinkModel, getFieldLinksForExplore, getVariableUsageIn
 import { getTraceToLogsSpanQuery, interpolateQueries } from './components/logsLink';
 import { type SpanLinkDef, type SpanLinkFunc, SpanLinkType } from './components/types/links';
 import { type Trace, type TraceSpan, type TraceSpanReference } from './components/types/trace';
-import { getTimeRangeFromTimestamps, scopedVarsFromTrace } from './createTraceLink';
+import { getTimeRangeFromTimestamps, scopedVarsFromTrace, timeShiftToMs } from './createTraceLink';
 import { getDefaultMetricTags, getDefaultProfilingTags, getFormattedTags, getSpanTags } from './crossSignalConfig';
 
 /**
@@ -183,16 +182,15 @@ function legacyCreateSpanLinkFactory(
             // If multiple queries are returned, use the first query to respect the interface.
             // LogsLink will then try to figure out which query to use and uppdate the link.
             // Otherwise, non-array, will use the legacy behavior.
-            query: Array.isArray(query) ? query[0] : query,
+            query: {
+              ...(Array.isArray(query) ? query[0] : query),
+              datasource: { type: logsDataSourceSettings.type, uid: logsDataSourceSettings.uid },
+            },
             range: getTimeRangeFromSpan(
               span,
               {
-                startMs: traceToLogsOptions.spanStartTimeShift
-                  ? rangeUtil.intervalToMs(traceToLogsOptions.spanStartTimeShift)
-                  : 0,
-                endMs: traceToLogsOptions.spanEndTimeShift
-                  ? rangeUtil.intervalToMs(traceToLogsOptions.spanEndTimeShift)
-                  : 0,
+                startMs: timeShiftToMs(traceToLogsOptions.spanStartTimeShift),
+                endMs: timeShiftToMs(traceToLogsOptions.spanEndTimeShift),
               },
               isSplunkDS
             ),
@@ -240,14 +238,13 @@ function legacyCreateSpanLinkFactory(
               })) ||
             link;
 
-          if (Array.isArray(query)) {
-            link.interpolatedParams = {
-              ...link.interpolatedParams,
-              alternativeQueries: interpolateQueries(query, scopedVars, replaceVariables).map((query) => ({
+          if (Array.isArray(query) && link.interpolatedParams) {
+            link.interpolatedParams.alternativeQueries = interpolateQueries(query, scopedVars, replaceVariables).map(
+              (query) => ({
                 ...query,
-                datasource: { uid: logsDataSourceSettings.uid },
-              })),
-            };
+                datasource: { type: logsDataSourceSettings.type, uid: logsDataSourceSettings.uid },
+              })
+            );
           }
 
           links.push({
@@ -286,6 +283,7 @@ function legacyCreateSpanLinkFactory(
             query: {
               expr,
               refId: 'A',
+              datasource: { type: metricsDataSourceSettings.type, uid: metricsDataSourceSettings.uid },
             },
           },
         };
@@ -308,12 +306,8 @@ function legacyCreateSpanLinkFactory(
           internalLink: dataLink.internal!,
           scopedVars,
           range: getTimeRangeFromSpan(span, {
-            startMs: traceToMetricsOptions.spanStartTimeShift
-              ? rangeUtil.intervalToMs(traceToMetricsOptions.spanStartTimeShift)
-              : -120000,
-            endMs: traceToMetricsOptions.spanEndTimeShift
-              ? rangeUtil.intervalToMs(traceToMetricsOptions.spanEndTimeShift)
-              : 120000,
+            startMs: timeShiftToMs(traceToMetricsOptions.spanStartTimeShift, -120000),
+            endMs: timeShiftToMs(traceToMetricsOptions.spanEndTimeShift, 120000),
           }),
           field: {
             name: '',

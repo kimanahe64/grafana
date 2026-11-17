@@ -164,6 +164,13 @@ func (s *Service) authenticate(ctx context.Context, c authn.Client, r *authn.Req
 		attribute.String("identity.AuthenticatedBy", identity.GetAuthenticatedBy()),
 	)
 
+	if identity.ServiceAccountTokenID != 0 {
+		span.SetAttributes(
+			attribute.Int64("identity.ServiceAccountTokenID", identity.ServiceAccountTokenID),
+			attribute.String("identity.ServiceAccountTokenName", identity.ServiceAccountTokenName),
+		)
+	}
+
 	if len(identity.ClientParams.FetchPermissionsParams.RestrictedActions) > 0 {
 		span.SetAttributes(attribute.StringSlice("identity.ClientParams.FetchPermissionsParams.RestrictedActions", identity.ClientParams.FetchPermissionsParams.RestrictedActions))
 	}
@@ -537,12 +544,12 @@ func parseNamespace(path string) string {
 	// Possbile url paths can be found here:
 	// https://github.com/kubernetes/kubernetes/blob/803e9d64952407981b3815b1d749cc96a39ba3c6/staging/src/k8s.io/apiserver/pkg/endpoints/request/requestinfo.go#L104-L127
 	const namespacePath = "/namespaces/"
-	index := strings.Index(path, namespacePath)
-	if index == -1 {
+	_, after, ok := strings.Cut(path, namespacePath)
+	if !ok {
 		return ""
 	}
 
-	parts := strings.Split(path[index+len(namespacePath):], "/")
+	parts := strings.Split(after, "/")
 	if len(parts) == 0 {
 		return ""
 	}

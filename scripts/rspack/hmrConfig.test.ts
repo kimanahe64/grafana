@@ -20,14 +20,12 @@ function inspect(config: unknown) {
     lazyCompilation?: unknown;
   };
 
-  const filename = cfg.output?.filename;
   const plugins = (cfg.plugins ?? []).filter((plugin) => plugin != null);
   const cssPlugin = plugins.find((plugin) => plugin.constructor?.name?.includes('CssExtract'));
   const swcRule = (cfg.module?.rules ?? []).find((rule) => String(rule.test) === String(/\.tsx?$/));
 
   return {
-    appFilename: typeof filename === 'function' ? filename({ chunk: { name: 'app' } }) : filename,
-    bootFilename: typeof filename === 'function' ? filename({ chunk: { name: 'boot' } }) : filename,
+    appFilename: cfg.output?.filename,
     chunkFilename: cfg.output?.chunkFilename,
     cssFilename: cssPlugin?.options?.filename,
     reactTransform: swcRule?.use?.options?.jsc?.transform?.react,
@@ -40,9 +38,8 @@ function inspect(config: unknown) {
 const noChecks = { noTsCheck: '1', noLint: '1' } as const;
 
 describe('the production config', () => {
-  // `--env` is a user-facing CLI surface and `build:rspack:nominify` already chains flags onto
-  // it, so a production build must ignore `hmr` rather than quietly honour it: the result
-  // compiles clean but ships unhashed filenames and Fast Refresh calls with no runtime.
+  // `build:nominify` already chains `--env` flags, so a stray `hmr=1` is easy to pass. Honouring
+  // it compiles cleanly but ships unhashed filenames and Fast Refresh calls with no runtime.
   it('ignores --env hmr=1 entirely', () => {
     const [plain] = prod({});
     const [withHmr] = prod({ hmr: '1' });
@@ -55,7 +52,7 @@ describe('the production config', () => {
 });
 
 describe('the dev config without hmr', () => {
-  // This is what `start:rspack:noHmr` runs, and what the frontend-service stack builds with.
+  // This is what `start:noHmr` runs, and what the frontend-service stack builds with.
   it('keeps content hashes and starts no dev server', () => {
     const built = inspect(dev(noChecks));
 
@@ -69,6 +66,13 @@ describe('the dev config without hmr', () => {
 });
 
 describe('the dev config with hmr', () => {
+  it('only overlays build errors', () => {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+    const devServer = inspect(dev({ ...noChecks, hmr: '1' })).devServer as { client: { overlay: unknown } };
+
+    expect(devServer.client.overlay).toEqual({ errors: true, warnings: false, runtimeErrors: false });
+  });
+
   it('drops content hashes, since hot updates patch stable names', () => {
     const built = inspect(dev({ ...noChecks, hmr: '1' }));
 
@@ -84,11 +88,6 @@ describe('the dev config with hmr', () => {
     expect(built.hasRefreshPlugin).toBe(true);
   });
 
-  it('never hashes boot.js, which the Go template references by name', () => {
-    expect(inspect(dev({ ...noChecks, hmr: '1' })).bootFilename).toBe('[name].js');
-    expect(inspect(dev(noChecks)).bootFilename).toBe('[name].js');
-  });
-
   it('binds the dev server to the configured host rather than every interface', () => {
     // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
     const devServer = inspect(dev({ ...noChecks, hmr: '1' })).devServer as {
@@ -101,7 +100,7 @@ describe('the dev config with hmr', () => {
     expect(devServer.host).toBe('localhost');
     expect(devServer.port).toBe(3333);
     // The path the Go side fetches the manifest from - see webassets.PublicPathFor.
-    expect(devServer.devMiddleware?.publicPath).toBe('/public/build/rspack/');
+    expect(devServer.devMiddleware?.publicPath).toBe('/public/build/');
     expect(devServer.devMiddleware?.writeToDisk).toBe(false);
   });
 

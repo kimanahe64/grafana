@@ -5,8 +5,62 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/grafana/grafana/pkg/infra/log"
 	"github.com/grafana/grafana/pkg/storage/unified/resource"
+	"github.com/grafana/grafana/pkg/storage/unified/resourcepb"
 )
+
+func TestHitsToFieldValuesUsesZeroForMalformedLegacyID(t *testing.T) {
+	key := &resourcepb.ResourceKey{Namespace: "default", Group: "dashboard.grafana.app", Resource: "dashboards", Name: "dash-1"}
+	match := &queryHit{
+		ID: resource.SearchID(key),
+		Fields: map[string]any{
+			resource.SEARCH_FIELD_LABELS + "." + resource.SEARCH_FIELD_LEGACY_ID: "not-an-integer",
+			resource.SEARCH_FIELD_TITLE: "Dashboard",
+		},
+	}
+	hits := []*queryHit{match}
+	logger := log.NewNopLogger()
+
+	schema := &fieldValueResultSchema{
+		fields: []*resourcepb.ResourceSearchField{
+			{Name: resource.SEARCH_FIELD_LEGACY_ID, Type: resourcepb.ResourceSearchField_INT64},
+			{Name: resource.SEARCH_FIELD_TITLE, Type: resourcepb.ResourceSearchField_STRING},
+		},
+		definitions: []resource.SearchFieldDefinition{
+			{Name: resource.SEARCH_FIELD_LEGACY_ID, Type: resource.SearchFieldTypeInt64},
+			{Name: resource.SEARCH_FIELD_TITLE, Type: resource.SearchFieldTypeString},
+		},
+	}
+	fields, rows, err := hitsToFieldValues(logger, schema, hits)
+	require.NoError(t, err)
+	require.Equal(t, schema.fields, fields)
+	require.Len(t, rows, 1)
+	require.Equal(t, key, rows[0].Key)
+	require.Equal(t, []*resourcepb.ResourceSearchValue{
+		{FieldIndex: 0, Int64Values: []int64{0}},
+		{FieldIndex: 1, StringValues: []string{"Dashboard"}},
+	}, rows[0].Values)
+}
+
+func TestHitsToFieldValuesUsesZeroForInvalidResourceVersion(t *testing.T) {
+	key := &resourcepb.ResourceKey{Namespace: "default", Group: "dashboard.grafana.app", Resource: "dashboards", Name: "dash-1"}
+	hits := []*queryHit{{
+		ID:     resource.SearchID(key),
+		Fields: map[string]any{resource.SEARCH_FIELD_RV_STRING: "not-an-integer"},
+	}}
+	_, rows, err := hitsToFieldValues(log.NewNopLogger(), &fieldValueResultSchema{includeResourceVersion: true}, hits)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, key, rows[0].Key)
+	require.Zero(t, rows[0].ResourceVersion)
+}
+
+func TestHitsToFieldValuesRejectsInvalidResourceIdentity(t *testing.T) {
+	hits := []*queryHit{{ID: "not-a-search-id"}}
+	_, _, err := hitsToFieldValues(log.NewNopLogger(), &fieldValueResultSchema{}, hits)
+	require.Error(t, err)
+}
 
 func TestNewSearchResultValue(t *testing.T) {
 	t.Run("scalar zero values remain present", func(t *testing.T) {
@@ -67,4 +121,31 @@ func TestNewSearchResultValue(t *testing.T) {
 		_, err = newSearchResultValue(0, resource.SearchFieldDefinition{Type: resource.SearchFieldTypeInt64}, "not a number")
 		require.ErrorContains(t, err, "expected int64-compatible number")
 	})
+}
+
+// A stored value that is not a valid resource version must not fail the search:
+// it is indexed data, and the caller can do nothing about it.
+func TestHitResourceVersion(t *testing.T) {
+	logger := log.NewNopLogger()
+
+	for _, tc := range []struct {
+		name  string
+		value any
+		want  int64
+	}{
+		{name: "absent", value: nil, want: 0},
+		{name: "valid", value: "1958241239561142273", want: 1958241239561142273},
+		{name: "not a number", value: "nope", want: 0},
+		{name: "empty", value: "", want: 0},
+		{name: "overflows int64", value: "99999999999999999999", want: 0},
+		{name: "not a string", value: float64(12), want: 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			match := &queryHit{ID: "default/group/resource/name"}
+			if tc.value != nil {
+				match.Fields = map[string]any{resource.SEARCH_FIELD_RV_STRING: tc.value}
+			}
+			require.Equal(t, tc.want, hitResourceVersion(logger, match))
+		})
+	}
 }

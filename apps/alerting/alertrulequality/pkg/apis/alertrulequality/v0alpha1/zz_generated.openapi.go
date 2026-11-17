@@ -17,6 +17,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		AlertRuleQualityPolicy{}.OpenAPIModelName():     schema_pkg_apis_alertrulequality_v0alpha1_AlertRuleQualityPolicy(ref),
 		AlertRuleQualityPolicyList{}.OpenAPIModelName(): schema_pkg_apis_alertrulequality_v0alpha1_AlertRuleQualityPolicyList(ref),
 		AlertRuleQualityPolicySpec{}.OpenAPIModelName(): schema_pkg_apis_alertrulequality_v0alpha1_AlertRuleQualityPolicySpec(ref),
+		FieldRequirement{}.OpenAPIModelName():           schema_pkg_apis_alertrulequality_v0alpha1_FieldRequirement(ref),
 	}
 }
 
@@ -24,7 +25,7 @@ func schema_pkg_apis_alertrulequality_v0alpha1_AlertRuleQualityPolicy(ref common
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "AlertRuleQualityPolicy declares what a compliant Grafana-managed alert rule looks like for an org. It is a singleton: the only accepted name is DefaultPolicyName.\n\nIt is the single source of truth for every consumer, so the validator that rejects a non-compliant rule and the views that report on rule quality cannot disagree about what compliant means.",
+				Description: "AlertRuleQualityPolicy declares what a compliant Grafana-managed alert rule looks like. The Org policy is a singleton named DefaultPolicyName. A Team policy is named by the UID of its team, with one policy per team.\n\nIt is the single source of truth for every consumer, so the validator that rejects a non-compliant rule and the views that report on rule quality cannot disagree about what compliant means.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
@@ -93,8 +94,7 @@ func schema_pkg_apis_alertrulequality_v0alpha1_AlertRuleQualityPolicyList(ref co
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Default: map[string]interface{}{},
-										Ref:     ref(AlertRuleQualityPolicy{}.OpenAPIModelName()),
+										Ref: ref(AlertRuleQualityPolicy{}.OpenAPIModelName()),
 									},
 								},
 							},
@@ -112,24 +112,25 @@ func schema_pkg_apis_alertrulequality_v0alpha1_AlertRuleQualityPolicySpec(ref co
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "AlertRuleQualityPolicySpec lists the fields an alert rule must carry.\n\nBoth lists are optional and an empty policy requires nothing: a required field rejects rule creation and editing, so a policy nobody configured must not enforce anything.",
+				Description: "AlertRuleQualityPolicySpec defines compliance independently of write enforcement.",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"requiredAnnotations": {
 						VendorExtensible: spec.VendorExtensible{
 							Extensions: spec.Extensions{
-								"x-kubernetes-list-type": "set",
+								"x-kubernetes-list-map-keys": []interface{}{
+									"key",
+								},
+								"x-kubernetes-list-type": "map",
 							},
 						},
 						SchemaProps: spec.SchemaProps{
-							Description: "Annotation keys that must be present and non-empty on every alert rule, e.g. \"summary\", \"description\", \"runbook_url\".",
+							Description: "Annotation keys that must be present and non-empty for a rule to be compliant, e.g. \"summary\", \"description\", \"runbook_url\".",
 							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Default: "",
-										Type:    []string{"string"},
-										Format:  "",
+										Ref: ref(FieldRequirement{}.OpenAPIModelName()),
 									},
 								},
 							},
@@ -138,24 +139,54 @@ func schema_pkg_apis_alertrulequality_v0alpha1_AlertRuleQualityPolicySpec(ref co
 					"requiredLabels": {
 						VendorExtensible: spec.VendorExtensible{
 							Extensions: spec.Extensions{
-								"x-kubernetes-list-type": "set",
+								"x-kubernetes-list-map-keys": []interface{}{
+									"key",
+								},
+								"x-kubernetes-list-type": "map",
 							},
 						},
 						SchemaProps: spec.SchemaProps{
-							Description: "Label keys that must be present and non-empty on every alert rule, e.g. \"team\", \"severity\".",
+							Description: "Label keys that must be present and non-empty for a rule to be compliant, e.g. \"team\", \"severity\".",
 							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
 									SchemaProps: spec.SchemaProps{
-										Default: "",
-										Type:    []string{"string"},
-										Format:  "",
+										Ref: ref(FieldRequirement{}.OpenAPIModelName()),
 									},
 								},
 							},
 						},
 					},
 				},
+			},
+		},
+		Dependencies: []string{
+			FieldRequirement{}.OpenAPIModelName()},
+	}
+}
+
+func schema_pkg_apis_alertrulequality_v0alpha1_FieldRequirement(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type: []string{"object"},
+				Properties: map[string]spec.Schema{
+					"key": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+					"enforce": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Enforcement is opt-in so a newly configured requirement can be assessed without blocking alert rule writes.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"key"},
 			},
 		},
 	}
