@@ -125,7 +125,7 @@ export function DashList(props: PanelProps<Options>) {
     const dashboardList = [...dashboards.values()];
     return [
       dashboardList.filter((dash) => dash.isRecent),
-      dashboardList.filter((dash) => dash.isSearchResult).sort((a, b) => collator.compare(a.name, b.name)),
+      dashboardList.filter((dash) => dash.isSearchResult).sort((a, b) => collator.compare(a.uid, b.uid)),
     ];
   }, [dashboards]);
 
